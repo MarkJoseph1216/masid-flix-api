@@ -95,15 +95,22 @@ class AuthController extends Controller
         $onlineUsers = User::where('is_online', true)
             ->where('id', '!=', $request->user()->id)
             ->limit(50)
-            ->get(['id', 'name', 'email', 'avatar', 'last_seen_at']);
+            ->get(['id', 'name', 'email', 'last_seen_at']);
 
         return response()->json([
             'status' => 'success',
             'online_count' => $onlineUsers->count(),
-            'users' => $onlineUsers,
+            'users' => $onlineUsers->map(function ($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'avatar' => 'https://ui-avatars.com/api/?name=' . urlencode($user->name),
+                    'last_seen_at' => $user->last_seen_at,
+                ];
+            }),
         ]);
     }
-
 
     public function getUsers(Request $request)
     {
