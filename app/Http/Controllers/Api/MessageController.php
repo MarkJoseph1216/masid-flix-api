@@ -122,4 +122,25 @@ class MessageController extends Controller
             'conversations' => $result,
         ]);
     }
+
+    public function markAsRead(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        Message::where('receiver_id', $request->user()->id)
+            ->where('sender_id', $request->user_id)
+            ->where('is_read', false)
+            ->update(['is_read' => true, 'read_at' => now()]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Messages marked as read',
+        ]);
+    }
 }

@@ -20,4 +20,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/messages', [MessageController::class, 'store']);
     Route::get('/messages/unread-count', [MessageController::class, 'unreadCount']);
     Route::get('/messages/conversations', [MessageController::class, 'conversations']);
+    Route::post('/messages/mark-read', [MessageController::class, 'markAsRead']);
 });
