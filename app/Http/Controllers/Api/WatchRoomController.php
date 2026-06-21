@@ -107,7 +107,7 @@ class WatchRoomController extends Controller
 
         WatchRoomParticipant::where('room_id', $request->room_id)
             ->where('user_id', $request->user()->id)
-            ->update(['left_at' => now()]);
+            ->delete();
 
         $room = WatchRoom::find($request->room_id);
         if ($room && $room->host_id === $request->user()->id) {
