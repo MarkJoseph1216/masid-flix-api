@@ -15,7 +15,10 @@ class WatchRoomController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'media_id' => 'required',
+            'imdb_id' => 'nullable|string',
             'media_type' => 'required|in:movie,tv',
+            'season' => 'nullable|integer|min:1',
+            'episode' => 'nullable|integer|min:1',
             'title' => 'required|string',
             'poster_path' => 'nullable|string',
             'backdrop_path' => 'nullable|string',
@@ -28,7 +31,10 @@ class WatchRoomController extends Controller
         $room = WatchRoom::create([
             'host_id' => $request->user()->id,
             'media_id' => $request->media_id,
+            'imdb_id' => $request->imdb_id,
             'media_type' => $request->media_type,
+            'season' => $request->season ?? 1,
+            'episode' => $request->episode ?? 1,
             'room_code' => strtoupper(Str::random(6)),
             'title' => $request->title,
             'poster_path' => $request->poster_path,

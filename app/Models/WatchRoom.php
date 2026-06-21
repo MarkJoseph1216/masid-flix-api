@@ -12,7 +12,10 @@ class WatchRoom extends Model
     protected $fillable = [
         'host_id',
         'media_id',
+        'imdb_id',
         'media_type',
+        'season',
+        'episode',
         'room_code',
         'title',
         'poster_path',
@@ -27,6 +30,8 @@ class WatchRoom extends Model
         'is_active' => 'boolean',
         'is_playing' => 'boolean',
         'current_time' => 'integer',
+        'season' => 'integer',
+        'episode' => 'integer',
     ];
 
     public function host()
