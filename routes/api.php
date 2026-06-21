@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\WatchRoomController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -21,4 +22,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/messages/unread-count', [MessageController::class, 'unreadCount']);
     Route::get('/messages/conversations', [MessageController::class, 'conversations']);
     Route::post('/messages/mark-read', [MessageController::class, 'markAsRead']);
+
+    Route::post('/watch-room/create', [WatchRoomController::class, 'create']);
+    Route::post('/watch-room/join', [WatchRoomController::class, 'join']);
+    Route::post('/watch-room/leave', [WatchRoomController::class, 'leave']);
+    Route::post('/watch-room/sync', [WatchRoomController::class, 'syncPlayback']);
+    Route::get('/watch-room/details', [WatchRoomController::class, 'getRoom']);
+    Route::get('/watch-room/active', [WatchRoomController::class, 'getActiveRooms']);
 });
