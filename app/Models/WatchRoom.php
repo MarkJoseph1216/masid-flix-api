@@ -36,7 +36,7 @@ class WatchRoom extends Model
 
     public function participants()
     {
-        return $this->hasMany(WatchRoomParticipant::class);
+        return $this->hasMany(WatchRoomParticipant::class, 'room_id');
     }
 
     public function getParticipantCountAttribute()

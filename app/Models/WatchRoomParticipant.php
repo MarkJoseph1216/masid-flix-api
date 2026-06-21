@@ -23,7 +23,7 @@ class WatchRoomParticipant extends Model
 
     public function room()
     {
-        return $this->belongsTo(WatchRoom::class);
+        return $this->belongsTo(WatchRoom::class, 'room_id');
     }
 
     public function user()

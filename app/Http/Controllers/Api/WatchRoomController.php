@@ -38,19 +38,20 @@ class WatchRoomController extends Controller
             'is_playing' => false,
         ]);
 
-    
         WatchRoomParticipant::create([
             'room_id' => $room->id,
             'user_id' => $request->user()->id,
             'joined_at' => now(),
         ]);
 
+        $roomWithDetails = WatchRoom::with(['host', 'participants.user'])
+            ->find($room->id);
+
         return response()->json([
             'status' => 'success',
-            'room' => $room->load('host', 'participants.user'),
+            'room' => $roomWithDetails,
         ]);
     }
-
 
     public function join(Request $request)
     {
@@ -85,9 +86,12 @@ class WatchRoomController extends Controller
             ]);
         }
 
+        $roomWithDetails = WatchRoom::with(['host', 'participants.user'])
+            ->find($room->id);
+
         return response()->json([
             'status' => 'success',
-            'room' => $room->load('host', 'participants.user'),
+            'room' => $roomWithDetails,
         ]);
     }
 
@@ -106,7 +110,7 @@ class WatchRoomController extends Controller
             ->update(['left_at' => now()]);
 
         $room = WatchRoom::find($request->room_id);
-        if ($room->host_id === $request->user()->id) {
+        if ($room && $room->host_id === $request->user()->id) {
             $room->update(['is_active' => false]);
         }
 
@@ -130,7 +134,6 @@ class WatchRoomController extends Controller
 
         $room = WatchRoom::find($request->room_id);
 
-        // Only host can sync
         if ($room->host_id !== $request->user()->id) {
             return response()->json([
                 'status' => 'error',
@@ -149,9 +152,6 @@ class WatchRoomController extends Controller
         ]);
     }
 
-    /**
-     * Get room details
-     */
     public function getRoom(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -171,9 +171,6 @@ class WatchRoomController extends Controller
         ]);
     }
 
-    /**
-     * Get active rooms (for discoverability)
-     */
     public function getActiveRooms(Request $request)
     {
         $rooms = WatchRoom::with(['host', 'participants.user'])
