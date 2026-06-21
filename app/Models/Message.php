@@ -15,6 +15,7 @@ class Message extends Model
         'message',
         'is_read',
         'read_at',
+        'party_id',
     ];
 
     protected $casts = [

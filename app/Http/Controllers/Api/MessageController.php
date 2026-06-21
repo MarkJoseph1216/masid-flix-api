@@ -13,31 +13,37 @@ class MessageController extends Controller
     public function index(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'required_without:party_id|exists:users,id',
+            'party_id' => 'required_without:user_id|string',
             'limit' => 'sometimes|integer|min:1|max:100',
             'before' => 'sometimes|integer',
         ]);
 
-        if ($validator->fails()) {
+        if ($validator->fails()) {  
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $userId = $request->user_id;
-        $limit = $request->limit ?? 50;
-        $before = $request->before;
+        $query = Message::query()->with(['sender', 'receiver']);
 
-        $query = Message::betweenUsers($request->user()->id, $userId)
-            ->with(['sender', 'receiver']);
-
-        if ($before) {
-            $query->where('id', '<', $before);
+        if ($request->has('party_id')) {
+            $query->where('party_id', $request->party_id);
+        } else {
+            $query->betweenUsers($request->user()->id, $request->user_id);
         }
 
-        $messages = $query->orderBy('id', 'desc')->limit($limit)->get();
-        Message::where('receiver_id', $request->user()->id)
-            ->where('sender_id', $userId)
-            ->where('is_read', false)
-            ->update(['is_read' => true, 'read_at' => now()]);
+        if ($request->has('before')) {
+            $query->where('id', '<', $request->before);
+        }
+
+        $messages = $query->orderBy('id', 'desc')->limit($request->limit ?? 50)->get();
+
+        // Mark private messages as read if necessary
+        if ($request->has('user_id')) {
+            Message::where('receiver_id', $request->user()->id)
+                ->where('sender_id', $request->user_id)
+                ->where('is_read', false)
+                ->update(['is_read' => true, 'read_at' => now()]);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -48,7 +54,8 @@ class MessageController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'receiver_id' => 'required|exists:users,id|different:user_id',
+            'receiver_id' => 'nullable|exists:users,id',
+            'party_id' => 'nullable|string',
             'message' => 'required|string|max:1000',
         ]);
 
@@ -56,9 +63,14 @@ class MessageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        if (!$request->receiver_id && !$request->party_id) {
+            return response()->json(['error' => 'Receiver or Party ID is required'], 422);
+        }
+
         $message = Message::create([
             'sender_id' => $request->user()->id,
             'receiver_id' => $request->receiver_id,
+            'party_id' => $request->party_id,
             'message' => $request->message,
         ]);
 
