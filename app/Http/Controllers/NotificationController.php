@@ -129,24 +129,21 @@ class NotificationController extends Controller
 
             $debug['steps'][] = 'Fetching new access token...';
 
-            putenv('GOOGLE_APPLICATION_CREDENTIALS=' . storage_path('app/firebase/firebase-credentials.json'));
-            
             $client = new GoogleClient();
-            $client->useApplicationDefaultCredentials();
+            $client->setAuthConfig(storage_path('app/firebase/firebase-credentials.json'));
             $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
-            
+
             $token = $client->fetchAccessTokenWithAssertion();
-            
+
             if (!isset($token['access_token'])) {
-                $debug['steps'][] = 'ERROR: No access token returned';
-                $debug['steps'][] = 'Response: ' . json_encode($token);
+                $debug['steps'][] = 'ERROR: ' . json_encode($token);
                 return null;
             }
 
             $this->accessToken = $token['access_token'];
             $this->tokenExpiry = time() + ($token['expires_in'] ?? 3600);
 
-            $debug['steps'][] = 'Access token obtained and cached';
+            $debug['steps'][] = 'Access token obtained';
             return $this->accessToken;
 
         } catch (\Exception $e) {
