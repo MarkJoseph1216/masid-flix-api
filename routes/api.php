@@ -54,45 +54,26 @@ Route::get('/test-firebase', function () {
 });
 
 Route::get('/debug-firebase', function () {
-    try {
-        $credentialsJson = env('FIREBASE_SERVICE_ACCOUNT');
-        
-        $result = [
-            'env_exists' => $credentialsJson !== null,
-            'env_length' => strlen($credentialsJson ?? ''),
-            'json_valid' => false,
-            'project_id' => null,
-            'client_email' => null,
-            'has_private_key' => false,
-            'openssl_available' => extension_loaded('openssl'),
-        ];
-        
-        if ($credentialsJson) {
-            $data = json_decode($credentialsJson, true);
-            if (json_last_error() === JSON_ERROR_NONE) {
-                $result['json_valid'] = true;
-                $result['project_id'] = $data['project_id'] ?? null;
-                $result['client_email'] = $data['client_email'] ?? null;
-                $result['has_private_key'] = isset($data['private_key']);
-                
-                if (isset($data['private_key'])) {
-                    $key = str_replace('\n', "\n", $data['private_key']);
-                    $keyResource = openssl_pkey_get_private($key);
-                    $result['private_key_valid'] = $keyResource !== false;
-                    if ($keyResource) {
-                        openssl_pkey_free($keyResource);
-                    }
-                }
-            } else {
-                $result['json_error'] = json_last_error_msg();
-            }
+    $filePath = storage_path('app/firebase/firebase-credentials.json');
+    
+    $result = [
+        'file_path' => $filePath,
+        'file_exists' => file_exists($filePath),
+        'directory_exists' => is_dir(storage_path('app/firebase')),
+        'storage_path' => storage_path(),
+    ];
+    
+    if (file_exists($filePath)) {
+        $content = file_get_contents($filePath);
+        $data = json_decode($content, true);
+        $result['json_valid'] = json_last_error() === JSON_ERROR_NONE;
+        if ($result['json_valid']) {
+            $result['project_id'] = $data['project_id'] ?? 'missing';
+            $result['client_email'] = $data['client_email'] ?? 'missing';
         }
-        
-        return response()->json($result);
-        
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
+    
+    return response()->json($result);
 });
 
 Route::middleware('auth:sanctum')->group(function () {

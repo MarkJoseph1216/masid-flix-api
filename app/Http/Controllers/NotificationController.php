@@ -132,6 +132,11 @@ class NotificationController extends Controller
             
             if (!file_exists($filePath)) {
                 Log::error('Credentials file not found at: ' . $filePath);
+                Log::info('Checking if directory exists: ' . storage_path('app/firebase'));
+                if (!is_dir(storage_path('app/firebase'))) {
+                    Log::error('Directory does not exist, creating it...');
+                    mkdir(storage_path('app/firebase'), 0755, true);
+                }
                 return null;
             }
             
@@ -160,7 +165,7 @@ class NotificationController extends Controller
             }
             
             $privateKey = $credentials['private_key'];
-            Log::info('Private key raw length: ' . strlen($privateKey));
+            Log::info('Private key length: ' . strlen($privateKey));
             
             $privateKey = str_replace('\n', "\n", $privateKey);
             
@@ -224,8 +229,6 @@ class NotificationController extends Controller
             ]);
             
             $data = json_decode($response->getBody(), true);
-            
-            Log::info('📋 Token response keys: ' . json_encode(array_keys($data)));
             
             if (!isset($data['access_token'])) {
                 Log::error('No access token in response');
