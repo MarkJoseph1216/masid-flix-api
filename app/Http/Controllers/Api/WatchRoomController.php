@@ -112,37 +112,31 @@ class WatchRoomController extends Controller
         }
 
         $room = WatchRoom::find($request->room_id);
-        
-        if (!$room) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Room not found'
-            ], 404);
-        }
+        $isHost = $room && $room->host_id === $request->user()->id;
 
-        $isHost = $room->host_id === $request->user()->id;
-        $participant = WatchRoomParticipant::where('room_id', $request->room_id)
+        WatchRoomParticipant::where('room_id', $request->room_id)
             ->where('user_id', $request->user()->id)
-            ->first();
-
-        if ($participant) {
-            $participant->delete();
-        }
+            ->delete();
 
         if ($isHost) {
-            WatchRoomParticipant::where('room_id', $request->room_id)->delete();
-            $room->delete();
+            $room->update(['is_active' => false]);
+            
+            sleep(2);
+            
+            $room->forceDelete();
+            
+            WatchRoomParticipant::where('room_id', $request->room_id)->forceDelete();
             
             return response()->json([
                 'status' => 'success',
-                'message' => 'Room ended and deleted successfully',
+                'message' => 'Room ended',
                 'is_host' => true,
             ]);
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Left the room successfully',
+            'message' => 'Left the room',
             'is_host' => false,
         ]);
     }
