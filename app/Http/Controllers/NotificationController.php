@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\DeviceToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use GuzzleHttp\Client;
 use Google\Client as GoogleClient;
+use GuzzleHttp\Client;
 
 class NotificationController extends Controller
 {
+    private $accessToken = null;
+    private $tokenExpiry = 0;
+
     public function handle(Request $request)
     {
         $debug = ['steps' => [], 'error' => null, 'success' => false];
@@ -98,6 +101,7 @@ class NotificationController extends Controller
 
             $result = json_decode($response->getBody(), true);
             $debug['steps'][] = 'FCM response received';
+            $debug['fcm_response'] = $result;
 
             return ['success' => true, 'result' => $result];
 
@@ -118,29 +122,36 @@ class NotificationController extends Controller
     private function getAccessToken(array &$debug)
     {
         try {
-            $filePath = storage_path('app/firebase/firebase-credentials.json');
-            
-            if (!file_exists($filePath)) {
-                $debug['steps'][] = 'ERROR: Credentials file not found';
-                return null;
+            if ($this->accessToken && time() < $this->tokenExpiry - 300) {
+                $debug['steps'][] = 'Using cached access token';
+                return $this->accessToken;
             }
 
-            $googleClient = new GoogleClient();
-            $googleClient->setAuthConfig($filePath);
-            $googleClient->addScope('https://www.googleapis.com/auth/firebase.messaging');
+            $debug['steps'][] = 'Fetching new access token...';
+
+            putenv('GOOGLE_APPLICATION_CREDENTIALS=' . storage_path('app/firebase/firebase-credentials.json'));
             
-            $accessToken = $googleClient->fetchAccessTokenWithAssertion();
+            $client = new GoogleClient();
+            $client->useApplicationDefaultCredentials();
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
             
-            if (!isset($accessToken['access_token'])) {
+            $token = $client->fetchAccessTokenWithAssertion();
+            
+            if (!isset($token['access_token'])) {
                 $debug['steps'][] = 'ERROR: No access token returned';
+                $debug['steps'][] = 'Response: ' . json_encode($token);
                 return null;
             }
 
-            $debug['steps'][] = 'Access token obtained';
-            return $accessToken['access_token'];
+            $this->accessToken = $token['access_token'];
+            $this->tokenExpiry = time() + ($token['expires_in'] ?? 3600);
+
+            $debug['steps'][] = 'Access token obtained and cached';
+            return $this->accessToken;
 
         } catch (\Exception $e) {
             $debug['steps'][] = 'ERROR: ' . $e->getMessage();
+            $debug['steps'][] = 'Trace: ' . $e->getTraceAsString();
             return null;
         }
     }
