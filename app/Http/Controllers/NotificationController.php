@@ -63,7 +63,7 @@ class NotificationController extends Controller
     private function sendFCMNotification(array $data, array &$debug)
     {
         try {
-            $debug['steps'][] = 'Getting Firebase access token...';
+            $debug['steps'][] = 'Getting Firebase access token with Google Client...';
             
             $accessToken = $this->getAccessToken($debug);
             
@@ -143,122 +143,40 @@ class NotificationController extends Controller
     private function getAccessToken(array &$debug)
     {
         try {
-            $debug['steps'][] = 'Starting Firebase access token generation...';
-            
-            if (!extension_loaded('openssl')) {
-                $debug['steps'][] = 'ERROR: OpenSSL extension is not loaded';
-                return null;
-            }
-            $debug['steps'][] = 'OpenSSL extension is loaded';
+            $debug['steps'][] = 'Using Google Client library...';
             
             $filePath = storage_path('app/firebase/firebase-credentials.json');
-            $debug['steps'][] = 'Looking for credentials at: ' . $filePath;
             
             if (!file_exists($filePath)) {
-                $debug['steps'][] = 'ERROR: Credentials file not found';
-                return null;
-            }
-            $debug['steps'][] = 'Credentials file exists';
-            
-            $content = file_get_contents($filePath);
-            if ($content === false) {
-                $debug['steps'][] = 'ERROR: Could not read credentials file';
+                $debug['steps'][] = 'ERROR: Credentials file not found: ' . $filePath;
                 return null;
             }
             
-            $debug['steps'][] = 'File size: ' . strlen($content) . ' bytes';
+            $debug['steps'][] = 'Credentials file found';
             
-            $credentials = json_decode($content, true);
+            $client = new \Google\Client();
             
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $debug['steps'][] = 'ERROR: Invalid JSON: ' . json_last_error_msg();
+            $client->setAuthConfig($filePath);
+            
+            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+            
+            $debug['steps'][] = 'Google Client configured with credentials';
+            
+            $accessToken = $client->fetchAccessTokenWithAssertion();
+            
+            if (!isset($accessToken['access_token'])) {
+                $debug['steps'][] = 'ERROR: No access token returned';
+                $debug['steps'][] = 'Response: ' . json_encode($accessToken);
                 return null;
             }
             
-            $debug['steps'][] = 'Project ID: ' . ($credentials['project_id'] ?? 'missing');
-            $debug['steps'][] = 'Client Email: ' . ($credentials['client_email'] ?? 'missing');
-            
-            if (!isset($credentials['private_key'])) {
-                $debug['steps'][] = 'ERROR: No private_key found';
-                return null;
-            }
-            
-            $privateKey = $credentials['private_key'];
-            $debug['steps'][] = 'Private key raw length: ' . strlen($privateKey);
-            $privateKey = str_replace('\n', "\n", $privateKey);
-            $privateKey = trim($privateKey);
-            
-            if (!str_contains($privateKey, '-----BEGIN PRIVATE KEY-----')) {
-                $debug['steps'][] = 'ERROR: Invalid private key format';
-                $debug['steps'][] = 'First 50 chars: ' . substr($privateKey, 0, 50);
-                return null;
-            }
-            $debug['steps'][] = 'Private key has proper format';
-            $debug['steps'][] = 'Creating JWT...';
-            $now = time();
-            $header = [
-                'alg' => 'RS256',
-                'typ' => 'JWT',
-            ];
-        
-            $payload = [
-                'iss' => $credentials['client_email'],
-                'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
-                'aud' => 'https://oauth2.googleapis.com/token',
-                'exp' => $now + 3600,
-                'iat' => $now,
-            ];
-            
-            $base64Header = $this->base64UrlEncode(json_encode($header));
-            $base64Payload = $this->base64UrlEncode(json_encode($payload));
-            
-            $unsignedJwt = $base64Header . '.' . $base64Payload;
-            $debug['steps'][] = 'Unsigned JWT created: ' . substr($unsignedJwt, 0, 50) . '...';
-            
-            $signature = '';
-            if (!openssl_sign($unsignedJwt, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
-                $debug['steps'][] = 'ERROR: Failed to sign JWT: ' . openssl_error_string();
-                return null;
-            }
-            
-            $debug['steps'][] = 'JWT signed successfully';
-            
-            $base64Signature = $this->base64UrlEncode($signature);
-            $jwt = $unsignedJwt . '.' . $base64Signature;
-            
-            $debug['steps'][] = 'JWT created: ' . substr($jwt, 0, 50) . '...';
-            $debug['steps'][] = 'Exchanging JWT for access token...';
-            
-            $client = new Client();
-            $response = $client->post('https://oauth2.googleapis.com/token', [
-                'form_params' => [
-                    'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                    'assertion' => $jwt,
-                ],
-            ]);
-            
-            $data = json_decode($response->getBody(), true);
-            
-            $debug['steps'][] = 'Token response received';
-            
-            if (!isset($data['access_token'])) {
-                $debug['steps'][] = 'ERROR: No access token in response';
-                $debug['steps'][] = 'Response: ' . json_encode($data);
-                return null;
-            }
-            
-            $debug['steps'][] = 'Access token obtained successfully';
-            return $data['access_token'];
+            $debug['steps'][] = 'Access token obtained successfully with Google Client';
+            return $accessToken['access_token'];
             
         } catch (\Exception $e) {
             $debug['steps'][] = 'ERROR: ' . $e->getMessage();
             $debug['steps'][] = 'Trace: ' . $e->getTraceAsString();
             return null;
         }
-    }
-
-    private function base64UrlEncode($data)
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 }
