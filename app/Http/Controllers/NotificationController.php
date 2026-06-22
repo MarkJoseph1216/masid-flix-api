@@ -5,15 +5,33 @@ namespace App\Http\Controllers;
 use App\Models\DeviceToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use GuzzleHttp\Client;
+use Kreait\Firebase\Factory;
+use Kreait\Firebase\Messaging\CloudMessage;
+use Kreait\Firebase\Messaging\Notification;
 
 class NotificationController extends Controller
 {
+    private $messaging;
+
+    public function __construct()
+    {
+        try {
+            $factory = (new Factory)
+                ->withServiceAccount(storage_path('app/firebase/firebase-credentials.json'));
+            $this->messaging = $factory->createMessaging();
+            Log::info('Firebase initialized successfully');
+        } catch (\Exception $e) {
+            Log::error('Firebase init failed: ' . $e->getMessage());
+        }
+    }
+
     public function handle(Request $request)
     {
         $debug = ['steps' => [], 'error' => null, 'success' => false];
 
         try {
+            Log::info('Notification webhook received');
+            
             $validated = $request->validate([
                 'message_id' => 'required|integer',
                 'type' => 'required|string',
@@ -25,10 +43,16 @@ class NotificationController extends Controller
                 'fcm_token' => 'required|string',
             ]);
 
+            $debug['steps'][] = 'Request validated';
+
             $result = $this->sendFCMNotification($validated, $debug);
             $debug['success'] = true;
 
-            return response()->json(['status' => 'success', 'result' => $result, 'debug' => $debug]);
+            return response()->json([
+                'status' => 'success',
+                'result' => $result,
+                'debug' => $debug
+            ]);
 
         } catch (\Exception $e) {
             $debug['error'] = $e->getMessage();
@@ -44,73 +68,50 @@ class NotificationController extends Controller
 
     private function sendFCMNotification(array $data, array &$debug)
     {
-        $accessToken = $this->getAccessToken($debug);
-        if (!$accessToken) {
-            throw new \Exception('Could not get Firebase access token');
-        }
+        try {
+            if (!$this->messaging) {
+                throw new \Exception('Firebase messaging not initialized');
+            }
 
-        $client = new Client();
-        $title = $data['chat_type'] === 'direct' 
-            ? "New message from {$data['sender_name']}" 
-            : "Party chat from {$data['sender_name']}";
+            $debug['steps'][] = 'Messaging is initialized';
 
-        $payload = [
-            'message' => [
-                'token' => $data['fcm_token'],
-                'notification' => ['title' => $title, 'body' => $data['message']],
-                'data' => [
+            $title = $data['chat_type'] === 'direct' 
+                ? "New message from {$data['sender_name']}" 
+                : "Party chat from {$data['sender_name']}";
+
+            $debug['steps'][] = 'Building notification: ' . $title;
+
+            $message = CloudMessage::withTarget('token', $data['fcm_token'])
+                ->withNotification(Notification::create($title, $data['message']))
+                ->withData([
                     'sender_id' => (string) $data['sender_id'],
                     'sender_name' => $data['sender_name'],
                     'message_id' => (string) $data['message_id'],
                     'type' => $data['type'],
                     'chat_type' => $data['chat_type'],
-                ],
-                'android' => ['priority' => 'high'],
-                'apns' => ['payload' => ['aps' => ['sound' => 'default']]],
-            ],
-        ];
+                ]);
 
-        $response = $client->post(
-            'https://fcm.googleapis.com/v1/projects/ichatyou/messages:send',
-            [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $accessToken,
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => $payload,
-            ]
-        );
+            $debug['steps'][] = 'Sending FCM message...';
 
-        $result = json_decode($response->getBody(), true);
-        return $result;
-    }
+            $result = $this->messaging->send($message);
 
-    private function getAccessToken(array &$debug)
-    {
-        try {
-            $filePath = storage_path('app/firebase/firebase-credentials.json');
-            
-            if (!file_exists($filePath)) {
-                $debug['steps'][] = 'ERROR: Credentials file not found';
-                return null;
-            }
+            $debug['steps'][] = 'FCM sent successfully';
+            $debug['result'] = $result;
 
-            $client = new \Google\Client();
-            $client->setAuthConfig($filePath);
-            $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
-            
-            $accessToken = $client->fetchAccessTokenWithAssertion();
-            
-            if (!isset($accessToken['access_token'])) {
-                $debug['steps'][] = 'ERROR: No access token returned';
-                return null;
-            }
-
-            return $accessToken['access_token'];
+            return ['success' => true, 'result' => $result];
 
         } catch (\Exception $e) {
-            $debug['steps'][] = 'ERROR: ' . $e->getMessage();
-            return null;
+            $debug['steps'][] = 'FCM error: ' . $e->getMessage();
+            
+            if (str_contains($e->getMessage(), 'registration token') ||
+                str_contains($e->getMessage(), 'Invalid token') ||
+                str_contains($e->getMessage(), 'NotRegistered')) {
+                DeviceToken::where('fcm_token', $data['fcm_token'])
+                    ->update(['is_active' => false]);
+                $debug['steps'][] = 'Token deactivated';
+            }
+            
+            throw $e;
         }
     }
 }
