@@ -87,4 +87,17 @@ class User extends Authenticatable
 
         return 'Offline';
     }
+
+    public function deviceTokens()
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
+    public function getActiveTokens()
+    {
+        return $this->deviceTokens()
+            ->where('is_active', true)
+            ->pluck('fcm_token')
+            ->toArray();
+    }
 }

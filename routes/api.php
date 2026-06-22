@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\WatchRoomController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\DeviceTokenController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
@@ -29,4 +31,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/watch-room/sync', [WatchRoomController::class, 'syncPlayback']);
     Route::get('/watch-room/details', [WatchRoomController::class, 'getRoom']);
     Route::get('/watch-room/active', [WatchRoomController::class, 'getActiveRooms']);
+
+    Route::post('/notification', [NotificationController::class, 'handle']) ->middleware('throttle:100,1');
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/device-token', [DeviceTokenController::class, 'store']);
+        Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
+    });
+
+    Route::get('/ping', function () {
+        return response()->json(['status' => 'alive', 'time' => now()]);
+    });
 });
