@@ -76,6 +76,15 @@ Route::get('/debug-firebase', function () {
     return response()->json($result);
 });
 
+Route::get('/test-time', function () {
+    return response()->json([
+        'server_time' => time(),
+        'server_datetime' => date('Y-m-d H:i:s'),
+        'timezone' => date_default_timezone_get(),
+        'google_time' => date('Y-m-d H:i:s', strtotime('now')),
+    ]);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
