@@ -147,7 +147,6 @@ class NotificationController extends Controller
             
             if (!extension_loaded('openssl')) {
                 $debug['steps'][] = 'ERROR: OpenSSL extension is not loaded';
-                Log::error('OpenSSL extension is not loaded');
                 return null;
             }
             $debug['steps'][] = 'OpenSSL extension is loaded';
@@ -186,73 +185,51 @@ class NotificationController extends Controller
             
             $privateKey = $credentials['private_key'];
             $debug['steps'][] = 'Private key raw length: ' . strlen($privateKey);
-            
-            if (str_contains($privateKey, '\n')) {
-                $debug['steps'][] = 'Private key contains escaped newlines, converting...';
-                $privateKey = str_replace('\n', "\n", $privateKey);
-            }
+            $privateKey = str_replace('\n', "\n", $privateKey);
+            $privateKey = trim($privateKey);
             
             if (!str_contains($privateKey, '-----BEGIN PRIVATE KEY-----')) {
-                $debug['steps'][] = 'ERROR: Invalid private key format - missing BEGIN PRIVATE KEY';
+                $debug['steps'][] = 'ERROR: Invalid private key format';
                 $debug['steps'][] = 'First 50 chars: ' . substr($privateKey, 0, 50);
                 return null;
             }
-            $debug['steps'][] = 'Private key has proper BEGIN marker';
-            
-            $debug['steps'][] = 'Attempting to load private key with openssl...';
-            $keyResource = openssl_pkey_get_private($privateKey);
-            if ($keyResource === false) {
-                $debug['steps'][] = 'ERROR: Failed to load private key: ' . openssl_error_string();
-                return null;
-            }
-            $debug['steps'][] = 'Private key loaded successfully';
-            openssl_pkey_free($keyResource);
-            
+            $debug['steps'][] = 'Private key has proper format';
             $debug['steps'][] = 'Creating JWT...';
-            $client = new Client();
-            
-            $header = json_encode([
-                'typ' => 'JWT',
-                'alg' => 'RS256',
-            ]);
-            
             $now = time();
-            $payload = json_encode([
+            $header = [
+                'alg' => 'RS256',
+                'typ' => 'JWT',
+            ];
+        
+            $payload = [
                 'iss' => $credentials['client_email'],
                 'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
                 'aud' => 'https://oauth2.googleapis.com/token',
                 'exp' => $now + 3600,
                 'iat' => $now,
-            ]);
+            ];
             
-            $base64Header = rtrim(strtr(base64_encode($header), '+/', '-_'), '=');
-            $base64Payload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+            $base64Header = $this->base64UrlEncode(json_encode($header));
+            $base64Payload = $this->base64UrlEncode(json_encode($payload));
+            
             $unsignedJwt = $base64Header . '.' . $base64Payload;
+            $debug['steps'][] = 'Unsigned JWT created: ' . substr($unsignedJwt, 0, 50) . '...';
             
-            $debug['steps'][] = 'Unsigned JWT created';
-            $debug['steps'][] = 'Signing JWT...';
             $signature = '';
-            $keyResource = openssl_pkey_get_private($privateKey);
-            
-            if ($keyResource === false) {
-                $debug['steps'][] = 'ERROR: Failed to load private key for signing';
-                return null;
-            }
-            
-            if (!openssl_sign($unsignedJwt, $signature, $keyResource, OPENSSL_ALGO_SHA256)) {
+            if (!openssl_sign($unsignedJwt, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
                 $debug['steps'][] = 'ERROR: Failed to sign JWT: ' . openssl_error_string();
-                openssl_pkey_free($keyResource);
                 return null;
             }
-            openssl_pkey_free($keyResource);
             
             $debug['steps'][] = 'JWT signed successfully';
             
-            $base64Signature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
+            $base64Signature = $this->base64UrlEncode($signature);
             $jwt = $unsignedJwt . '.' . $base64Signature;
             
+            $debug['steps'][] = 'JWT created: ' . substr($jwt, 0, 50) . '...';
             $debug['steps'][] = 'Exchanging JWT for access token...';
             
+            $client = new Client();
             $response = $client->post('https://oauth2.googleapis.com/token', [
                 'form_params' => [
                     'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -278,5 +255,10 @@ class NotificationController extends Controller
             $debug['steps'][] = 'Trace: ' . $e->getTraceAsString();
             return null;
         }
+    }
+
+    private function base64UrlEncode($data)
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 }
