@@ -53,6 +53,48 @@ Route::get('/test-firebase', function () {
     }
 });
 
+Route::get('/debug-firebase', function () {
+    try {
+        $credentialsJson = env('FIREBASE_SERVICE_ACCOUNT');
+        
+        $result = [
+            'env_exists' => $credentialsJson !== null,
+            'env_length' => strlen($credentialsJson ?? ''),
+            'json_valid' => false,
+            'project_id' => null,
+            'client_email' => null,
+            'has_private_key' => false,
+            'openssl_available' => extension_loaded('openssl'),
+        ];
+        
+        if ($credentialsJson) {
+            $data = json_decode($credentialsJson, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $result['json_valid'] = true;
+                $result['project_id'] = $data['project_id'] ?? null;
+                $result['client_email'] = $data['client_email'] ?? null;
+                $result['has_private_key'] = isset($data['private_key']);
+                
+                if (isset($data['private_key'])) {
+                    $key = str_replace('\n', "\n", $data['private_key']);
+                    $keyResource = openssl_pkey_get_private($key);
+                    $result['private_key_valid'] = $keyResource !== false;
+                    if ($keyResource) {
+                        openssl_pkey_free($keyResource);
+                    }
+                }
+            } else {
+                $result['json_error'] = json_last_error_msg();
+            }
+        }
+        
+        return response()->json($result);
+        
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);

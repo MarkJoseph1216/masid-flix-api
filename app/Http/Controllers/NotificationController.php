@@ -120,32 +120,64 @@ class NotificationController extends Controller
     private function getAccessToken()
     {
         try {
-            $credentialsJson = env('FIREBASE_SERVICE_ACCOUNT');
+            Log::info('Starting Firebase access token generation...');
             
-            if (!$credentialsJson || $credentialsJson === '') {
-                Log::error('FIREBASE_SERVICE_ACCOUNT env variable not set');
+            if (!extension_loaded('openssl')) {
+                Log::error('OpenSSL extension is not loaded');
                 return null;
             }
             
-            $credentials = json_decode($credentialsJson, true);
+            $filePath = storage_path('app/firebase/firebase-credentials.json');
+            Log::info('Looking for credentials at: ' . $filePath);
+            
+            if (!file_exists($filePath)) {
+                Log::error('Credentials file not found at: ' . $filePath);
+                return null;
+            }
+            
+            $content = file_get_contents($filePath);
+            if ($content === false) {
+                Log::error('Could not read credentials file');
+                return null;
+            }
+            
+            Log::info('File size: ' . strlen($content) . ' bytes');
+            
+            $credentials = json_decode($content, true);
             
             if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error('Invalid JSON in FIREBASE_SERVICE_ACCOUNT: ' . json_last_error_msg());
+                Log::error('Invalid JSON in credentials file: ' . json_last_error_msg());
                 return null;
             }
             
-            if (isset($credentials['private_key'])) {
-                $credentials['private_key'] = str_replace('\n', "\n", $credentials['private_key']);
-                if (!str_contains($credentials['private_key'], '-----BEGIN PRIVATE KEY-----')) {
-                    Log::error('Invalid private key format');
-                    return null;
-                }
-            } else {
+            Log::info('Credentials loaded from file successfully');
+            Log::info('Project ID: ' . ($credentials['project_id'] ?? 'missing'));
+            Log::info('Client Email: ' . ($credentials['client_email'] ?? 'missing'));
+            
+            if (!isset($credentials['private_key'])) {
                 Log::error('No private_key found in credentials');
                 return null;
             }
             
-            Log::info('Credentials loaded for: ' . ($credentials['client_email'] ?? 'unknown'));
+            $privateKey = $credentials['private_key'];
+            Log::info('Private key raw length: ' . strlen($privateKey));
+            
+            $privateKey = str_replace('\n', "\n", $privateKey);
+            
+            if (!str_contains($privateKey, '-----BEGIN PRIVATE KEY-----')) {
+                Log::error('Invalid private key format - missing BEGIN PRIVATE KEY');
+                return null;
+            }
+            
+            Log::info('Private key formatted correctly');
+            
+            $keyResource = openssl_pkey_get_private($privateKey);
+            if ($keyResource === false) {
+                Log::error('Failed to load private key: ' . openssl_error_string());
+                return null;
+            }
+            Log::info('Private key loaded successfully');
+            openssl_pkey_free($keyResource);
             
             $client = new Client();
             
@@ -167,13 +199,17 @@ class NotificationController extends Controller
             $base64Payload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
             $unsignedJwt = $base64Header . '.' . $base64Payload;
             
-            $privateKey = $credentials['private_key'];
-            $signature = '';
+            Log::info('Unsigned JWT created, length: ' . strlen($unsignedJwt));
             
-            if (!openssl_sign($unsignedJwt, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
-                Log::error('Failed to sign JWT');
+            $signature = '';
+            $keyResource = openssl_pkey_get_private($privateKey);
+            if (!openssl_sign($unsignedJwt, $signature, $keyResource, OPENSSL_ALGO_SHA256)) {
+                Log::error('Failed to sign JWT: ' . openssl_error_string());
                 return null;
             }
+            openssl_pkey_free($keyResource);
+            
+            Log::info('JWT signed successfully');
             
             $base64Signature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
             $jwt = $unsignedJwt . '.' . $base64Signature;
@@ -189,8 +225,11 @@ class NotificationController extends Controller
             
             $data = json_decode($response->getBody(), true);
             
+            Log::info('📋 Token response keys: ' . json_encode(array_keys($data)));
+            
             if (!isset($data['access_token'])) {
-                Log::error('No access token in response: ' . json_encode($data));
+                Log::error('No access token in response');
+                Log::error('Response: ' . json_encode($data));
                 return null;
             }
             
