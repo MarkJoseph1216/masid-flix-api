@@ -11,9 +11,15 @@ class NotificationController extends Controller
 {
     public function handle(Request $request)
     {
+        $debug = [
+            'steps' => [],
+            'error' => null,
+            'success' => false,
+        ];
+
         try {
-            Log::info('Notification webhook received');
-            Log::info('Request data: ' . json_encode($request->all()));
+            $debug['steps'][] = 'Notification webhook received';
+            $debug['steps'][] = 'Request data: ' . json_encode($request->all());
 
             $validated = $request->validate([
                 'message_id' => 'required|integer',
@@ -26,30 +32,47 @@ class NotificationController extends Controller
                 'fcm_token' => 'required|string',
             ]);
 
-            $result = $this->sendFCMNotification($validated);
+            $debug['steps'][] = 'Request validated successfully';
 
-            Log::info('FCM sent successfully');
-            return response()->json(['status' => 'success', 'result' => $result]);
+            $result = $this->sendFCMNotification($validated, $debug);
+
+            $debug['steps'][] = 'FCM sent successfully';
+            $debug['success'] = true;
+
+            return response()->json([
+                'status' => 'success',
+                'result' => $result,
+                'debug' => $debug,
+            ]);
 
         } catch (\Exception $e) {
+            $debug['error'] = $e->getMessage();
+            $debug['steps'][] = 'Error: ' . $e->getMessage();
+            
             Log::error('Notification error: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
             
             return response()->json([
                 'status' => 'error',
                 'message' => $e->getMessage(),
+                'debug' => $debug,
             ], 500);
         }
     }
 
-    private function sendFCMNotification(array $data)
+    private function sendFCMNotification(array $data, array &$debug)
     {
         try {
-            $accessToken = $this->getAccessToken();
+            $debug['steps'][] = 'Getting Firebase access token...';
+            
+            $accessToken = $this->getAccessToken($debug);
             
             if (!$accessToken) {
+                $debug['steps'][] = 'Failed to get Firebase access token';
                 throw new \Exception('Could not get Firebase access token');
             }
+            
+            $debug['steps'][] = 'Access token obtained successfully';
             
             $client = new Client();
             
@@ -84,7 +107,7 @@ class NotificationController extends Controller
                 ],
             ];
             
-            Log::info('Sending FCM via HTTP...');
+            $debug['steps'][] = 'Sending FCM via HTTP...';
             
             $response = $client->post(
                 'https://fcm.googleapis.com/v1/projects/ichatyou/messages:send',
@@ -98,18 +121,18 @@ class NotificationController extends Controller
             );
             
             $result = json_decode($response->getBody(), true);
-            Log::info('FCM sent successfully: ' . json_encode($result));
+            $debug['steps'][] = 'FCM response received';
+            $debug['fcm_response'] = $result;
             
             return $result;
             
         } catch (\Exception $e) {
-            Log::error('FCM send error: ' . $e->getMessage());
+            $debug['steps'][] = 'FCM send error: ' . $e->getMessage();
             
             if (str_contains($e->getMessage(), 'registration token') ||
                 str_contains($e->getMessage(), 'Invalid token') ||
                 str_contains($e->getMessage(), 'NotRegistered')) {
                 
-                Log::warning('Token deactivated: ' . substr($data['fcm_token'], 0, 20) . '...');
                 DeviceToken::where('fcm_token', $data['fcm_token'])
                     ->update(['is_active' => false]);
             }
@@ -117,73 +140,75 @@ class NotificationController extends Controller
         }
     }
 
-    private function getAccessToken()
+    private function getAccessToken(array &$debug)
     {
         try {
-            Log::info('Starting Firebase access token generation...');
+            $debug['steps'][] = 'Starting Firebase access token generation...';
             
             if (!extension_loaded('openssl')) {
+                $debug['steps'][] = 'ERROR: OpenSSL extension is not loaded';
                 Log::error('OpenSSL extension is not loaded');
                 return null;
             }
+            $debug['steps'][] = 'OpenSSL extension is loaded';
             
             $filePath = storage_path('app/firebase/firebase-credentials.json');
-            Log::info('Looking for credentials at: ' . $filePath);
+            $debug['steps'][] = 'Looking for credentials at: ' . $filePath;
             
             if (!file_exists($filePath)) {
-                Log::error('Credentials file not found at: ' . $filePath);
-                Log::info('Checking if directory exists: ' . storage_path('app/firebase'));
-                if (!is_dir(storage_path('app/firebase'))) {
-                    Log::error('Directory does not exist, creating it...');
-                    mkdir(storage_path('app/firebase'), 0755, true);
-                }
+                $debug['steps'][] = 'ERROR: Credentials file not found';
                 return null;
             }
+            $debug['steps'][] = 'Credentials file exists';
             
             $content = file_get_contents($filePath);
             if ($content === false) {
-                Log::error('Could not read credentials file');
+                $debug['steps'][] = 'ERROR: Could not read credentials file';
                 return null;
             }
             
-            Log::info('File size: ' . strlen($content) . ' bytes');
+            $debug['steps'][] = 'File size: ' . strlen($content) . ' bytes';
             
             $credentials = json_decode($content, true);
             
             if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error('Invalid JSON in credentials file: ' . json_last_error_msg());
+                $debug['steps'][] = 'ERROR: Invalid JSON: ' . json_last_error_msg();
                 return null;
             }
             
-            Log::info('Credentials loaded from file successfully');
-            Log::info('Project ID: ' . ($credentials['project_id'] ?? 'missing'));
-            Log::info('Client Email: ' . ($credentials['client_email'] ?? 'missing'));
+            $debug['steps'][] = 'Project ID: ' . ($credentials['project_id'] ?? 'missing');
+            $debug['steps'][] = 'Client Email: ' . ($credentials['client_email'] ?? 'missing');
             
             if (!isset($credentials['private_key'])) {
-                Log::error('No private_key found in credentials');
+                $debug['steps'][] = 'ERROR: No private_key found';
                 return null;
             }
             
             $privateKey = $credentials['private_key'];
-            Log::info('Private key length: ' . strlen($privateKey));
+            $debug['steps'][] = 'Private key raw length: ' . strlen($privateKey);
             
-            $privateKey = str_replace('\n', "\n", $privateKey);
+            if (str_contains($privateKey, '\n')) {
+                $debug['steps'][] = 'Private key contains escaped newlines, converting...';
+                $privateKey = str_replace('\n', "\n", $privateKey);
+            }
             
             if (!str_contains($privateKey, '-----BEGIN PRIVATE KEY-----')) {
-                Log::error('Invalid private key format - missing BEGIN PRIVATE KEY');
+                $debug['steps'][] = 'ERROR: Invalid private key format - missing BEGIN PRIVATE KEY';
+                $debug['steps'][] = 'First 50 chars: ' . substr($privateKey, 0, 50);
                 return null;
             }
+            $debug['steps'][] = 'Private key has proper BEGIN marker';
             
-            Log::info('Private key formatted correctly');
-            
+            $debug['steps'][] = 'Attempting to load private key with openssl...';
             $keyResource = openssl_pkey_get_private($privateKey);
             if ($keyResource === false) {
-                Log::error('Failed to load private key: ' . openssl_error_string());
+                $debug['steps'][] = 'ERROR: Failed to load private key: ' . openssl_error_string();
                 return null;
             }
-            Log::info('Private key loaded successfully');
+            $debug['steps'][] = 'Private key loaded successfully';
             openssl_pkey_free($keyResource);
             
+            $debug['steps'][] = 'Creating JWT...';
             $client = new Client();
             
             $header = json_encode([
@@ -204,22 +229,29 @@ class NotificationController extends Controller
             $base64Payload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
             $unsignedJwt = $base64Header . '.' . $base64Payload;
             
-            Log::info('Unsigned JWT created, length: ' . strlen($unsignedJwt));
-            
+            $debug['steps'][] = 'Unsigned JWT created';
+            $debug['steps'][] = 'Signing JWT...';
             $signature = '';
             $keyResource = openssl_pkey_get_private($privateKey);
+            
+            if ($keyResource === false) {
+                $debug['steps'][] = 'ERROR: Failed to load private key for signing';
+                return null;
+            }
+            
             if (!openssl_sign($unsignedJwt, $signature, $keyResource, OPENSSL_ALGO_SHA256)) {
-                Log::error('Failed to sign JWT: ' . openssl_error_string());
+                $debug['steps'][] = 'ERROR: Failed to sign JWT: ' . openssl_error_string();
+                openssl_pkey_free($keyResource);
                 return null;
             }
             openssl_pkey_free($keyResource);
             
-            Log::info('JWT signed successfully');
+            $debug['steps'][] = 'JWT signed successfully';
             
             $base64Signature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
             $jwt = $unsignedJwt . '.' . $base64Signature;
             
-            Log::info('JWT created, exchanging for access token...');
+            $debug['steps'][] = 'Exchanging JWT for access token...';
             
             $response = $client->post('https://oauth2.googleapis.com/token', [
                 'form_params' => [
@@ -230,18 +262,20 @@ class NotificationController extends Controller
             
             $data = json_decode($response->getBody(), true);
             
+            $debug['steps'][] = 'Token response received';
+            
             if (!isset($data['access_token'])) {
-                Log::error('No access token in response');
-                Log::error('Response: ' . json_encode($data));
+                $debug['steps'][] = 'ERROR: No access token in response';
+                $debug['steps'][] = 'Response: ' . json_encode($data);
                 return null;
             }
             
-            Log::info('Access token obtained successfully');
+            $debug['steps'][] = 'Access token obtained successfully';
             return $data['access_token'];
             
         } catch (\Exception $e) {
-            Log::error('Failed to get access token: ' . $e->getMessage());
-            Log::error('Trace: ' . $e->getTraceAsString());
+            $debug['steps'][] = 'ERROR: ' . $e->getMessage();
+            $debug['steps'][] = 'Trace: ' . $e->getTraceAsString();
             return null;
         }
     }
