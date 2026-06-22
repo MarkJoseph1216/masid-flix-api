@@ -109,25 +109,31 @@ class MessageController extends Controller
                     : $message->sender_id;
             })
             ->map(function ($messages) {
-                return $messages->first();
+                return $messages->sortByDesc('created_at')->first();
             })
-            ->values()
-            ->take(20);
+            ->filter()
+            ->values();
 
-        $result = $conversations->map(function ($message) {
+        $result = $conversations->map(function ($message) use ($userId) {
+            $otherUser = $message->sender_id == $userId
+                ? $message->receiver
+                : $message->sender;
+
+            $unreadCount = Message::where('receiver_id', $userId)
+                ->where('sender_id', $otherUser->id)
+                ->where('is_read', false)
+                ->count();
+
             return [
-                'user' => $message->sender_id == request()->user()->id
-                    ? $message->receiver
-                    : $message->sender,
+                'user' => $otherUser,
                 'last_message' => $message,
-                'unread_count' => Message::where('receiver_id', request()->user()->id)
-                    ->where('sender_id', $message->sender_id == request()->user()->id
-                        ? $message->receiver_id
-                        : $message->sender_id)
-                    ->where('is_read', false)
-                    ->count(),
+                'unread_count' => $unreadCount,
             ];
         });
+
+        $result = $result->sortByDesc(function ($conversation) {
+            return $conversation['last_message']->created_at;
+        })->values();
 
         return response()->json([
             'status' => 'success',
