@@ -128,12 +128,22 @@ class NotificationController extends Controller
             }
 
             $debug['steps'][] = 'Fetching new access token...';
+            $credentialsJson = env('FIREBASE_SERVICE_ACCOUNT');
+
+            if (!$credentialsJson) {
+                $debug['steps'][] = 'ERROR: FIREBASE_SERVICE_ACCOUNT env not set';
+                return null;
+            }
+
+            $tempPath = storage_path('app/firebase-temp-credentials.json');
+            file_put_contents($tempPath, $credentialsJson);
 
             $client = new GoogleClient();
-            $client->setAuthConfig(storage_path('app/firebase/firebase-credentials.json'));
+            $client->setAuthConfig($tempPath);
             $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
 
             $token = $client->fetchAccessTokenWithAssertion();
+            @unlink($tempPath);
 
             if (!isset($token['access_token'])) {
                 $debug['steps'][] = 'ERROR: ' . json_encode($token);
