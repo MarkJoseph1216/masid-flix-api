@@ -17,9 +17,6 @@ class Message extends Model
         'message',
         'is_read',
         'read_at',
-        'party_id',
-        'created_at',
-        'updated_at',
     ];
 
     protected $casts = [
@@ -51,7 +48,7 @@ class Message extends Model
         });
     }
 
-     protected static function booted()
+    protected static function booted()
     {
         static::creating(function ($message) {
             if (is_null($message->created_at)) {
