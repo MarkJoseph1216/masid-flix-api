@@ -9,6 +9,8 @@ class Message extends Model
 {
     use HasFactory;
 
+    public $timestamps = true;
+
     protected $fillable = [
         'sender_id',
         'receiver_id',
@@ -16,6 +18,8 @@ class Message extends Model
         'is_read',
         'read_at',
         'party_id',
+        'created_at',
+        'updated_at',
     ];
 
     protected $casts = [
@@ -44,6 +48,22 @@ class Message extends Model
             $q->where('sender_id', $user1Id)->where('receiver_id', $user2Id);
         })->orWhere(function ($q) use ($user1Id, $user2Id) {
             $q->where('sender_id', $user2Id)->where('receiver_id', $user1Id);
+        });
+    }
+
+     protected static function booted()
+    {
+        static::creating(function ($message) {
+            if (is_null($message->created_at)) {
+                $message->created_at = now();
+            }
+            if (is_null($message->updated_at)) {
+                $message->updated_at = now();
+            }
+        });
+
+        static::updating(function ($message) {
+            $message->updated_at = now();
         });
     }
 }

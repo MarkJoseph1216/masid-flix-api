@@ -72,6 +72,8 @@ class MessageController extends Controller
             'receiver_id' => $request->receiver_id,
             'party_id' => $request->party_id,
             'message' => $request->message,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $message->load(['sender', 'receiver']);
