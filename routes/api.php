@@ -10,6 +10,13 @@ use App\Http\Controllers\DeviceTokenController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
+Route::post('/notification', [NotificationController::class, 'handle'])
+    ->middleware('throttle:100,1');
+
+Route::get('/ping', function () {
+    return response()->json(['status' => 'alive', 'time' => now()]);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
@@ -32,14 +39,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/watch-room/details', [WatchRoomController::class, 'getRoom']);
     Route::get('/watch-room/active', [WatchRoomController::class, 'getActiveRooms']);
 
-    Route::post('/notification', [NotificationController::class, 'handle']) ->middleware('throttle:100,1');
+    Route::post('/device-token', [DeviceTokenController::class, 'store']);
 
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::post('/device-token', [DeviceTokenController::class, 'store']);
-        Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
-    });
-
-    Route::get('/ping', function () {
-        return response()->json(['status' => 'alive', 'time' => now()]);
-    });
+    Route::delete('/device-token', [DeviceTokenController::class, 'destroy']);
 });
