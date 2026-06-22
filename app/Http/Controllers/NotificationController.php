@@ -30,8 +30,6 @@ class NotificationController extends Controller
         $debug = ['steps' => [], 'error' => null, 'success' => false];
 
         try {
-            Log::info('Notification webhook received');
-            
             $validated = $request->validate([
                 'message_id' => 'required|integer',
                 'type' => 'required|string',
@@ -81,15 +79,30 @@ class NotificationController extends Controller
 
             $debug['steps'][] = 'Building notification: ' . $title;
 
-            $message = CloudMessage::withTarget('token', $data['fcm_token'])
-                ->withNotification(Notification::create($title, $data['message']))
-                ->withData([
+            $message = CloudMessage::fromArray([
+                'token' => $data['fcm_token'],
+                'notification' => [
+                    'title' => $title,
+                    'body' => $data['message'],
+                ],
+                'data' => [
                     'sender_id' => (string) $data['sender_id'],
                     'sender_name' => $data['sender_name'],
                     'message_id' => (string) $data['message_id'],
                     'type' => $data['type'],
                     'chat_type' => $data['chat_type'],
-                ]);
+                ],
+                'android' => [
+                    'priority' => 'high',
+                ],
+                'apns' => [
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                        ],
+                    ],
+                ],
+            ]);
 
             $debug['steps'][] = 'Sending FCM message...';
 
