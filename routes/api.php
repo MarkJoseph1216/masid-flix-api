@@ -17,6 +17,42 @@ Route::get('/ping', function () {
     return response()->json(['status' => 'alive', 'time' => now()]);
 });
 
+Route::get('/test-firebase', function () {
+    try {
+        $credentials = env('FIREBASE_SERVICE_ACCOUNT');
+        
+        if (!$credentials) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'FIREBASE_SERVICE_ACCOUNT env variable not set'
+            ], 500);
+        }
+        
+        $data = json_decode($credentials, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid JSON: ' . json_last_error_msg()
+            ], 500);
+        }
+        
+        $factory = (new Kreait\Firebase\Factory)->withServiceAccount($data);
+        $messaging = $factory->createMessaging();
+        
+        return response()->json([
+            'status' => 'success',
+            'project_id' => $data['project_id'] ?? 'unknown',
+            'client_email' => $data['client_email'] ?? 'unknown'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);

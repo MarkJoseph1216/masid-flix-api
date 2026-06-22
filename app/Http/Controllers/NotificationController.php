@@ -29,12 +29,30 @@ class NotificationController extends Controller
         $credentials = env('FIREBASE_SERVICE_ACCOUNT');
         
         if ($credentials && $credentials !== '') {
+            Log::info('Using Firebase credentials from environment variable');
+            
             $credentialData = json_decode($credentials, true);
-            return (new Factory)->withServiceAccount($credentialData);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                Log::info('Valid Firebase credentials from env, project: ' . ($credentialData['project_id'] ?? 'unknown'));
+                return (new Factory)->withServiceAccount($credentialData);
+            } else {
+                Log::error('Invalid JSON in FIREBASE_SERVICE_ACCOUNT: ' . json_last_error_msg());
+            }
         }
         
         $filePath = storage_path('app/firebase/firebase-credentials.json');
-        return (new Factory)->withServiceAccount($filePath);
+        Log::info('📁 Looking for Firebase credentials at: ' . $filePath);
+        
+        if (file_exists($filePath)) {
+            $content = file_get_contents($filePath);
+            $data = json_decode($content, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                return (new Factory)->withServiceAccount($filePath);
+            }
+        }
+        
+        Log::error('No valid Firebase credentials found');
+        return null;
     }
 
     public function handle(Request $request)
