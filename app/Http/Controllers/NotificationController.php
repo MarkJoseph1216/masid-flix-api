@@ -20,7 +20,7 @@ class NotificationController extends Controller
             $this->messaging = $factory->createMessaging();
             Log::info('Firebase initialized successfully');
         } catch (\Exception $e) {
-            Log::error('Firebase initialization failed: ' . $e->getMessage());
+            Log::error('Firebase init failed: ' . $e->getMessage());
         }
     }
 
@@ -29,13 +29,11 @@ class NotificationController extends Controller
         $credentials = env('FIREBASE_SERVICE_ACCOUNT');
         
         if ($credentials && $credentials !== '') {
-            Log::info('Using Firebase credentials from environment variable');
             $credentialData = json_decode($credentials, true);
             return (new Factory)->withServiceAccount($credentialData);
         }
         
         $filePath = storage_path('app/firebase/firebase-credentials.json');
-        Log::info('📁 Using Firebase credentials from file: ' . $filePath);
         return (new Factory)->withServiceAccount($filePath);
     }
 
@@ -56,8 +54,13 @@ class NotificationController extends Controller
                 'fcm_token' => 'required|string',
             ]);
 
-            Log::info('Request validated successfully');
-            Log::info('Sending to FCM for token: ' . substr($validated['fcm_token'], 0, 20) . '...');
+            if (!$this->messaging) {
+                Log::error('Firebase messaging not initialized');
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Firebase not initialized'
+                ], 500);
+            }
 
             $this->sendFCMNotification($validated);
 
@@ -67,9 +70,10 @@ class NotificationController extends Controller
         } catch (\Exception $e) {
             Log::error('Notification error: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -84,11 +88,9 @@ class NotificationController extends Controller
             }
 
             Log::info('Building notification: ' . $title);
-
-            $notification = FirebaseNotification::create($title, $data['message']);
-
-            $message = CloudMessage::withTarget('token', $data['fcm_token'])
-                ->withNotification($notification)
+            $message = CloudMessage::new()
+                ->withToken($data['fcm_token'])
+                ->withNotification(FirebaseNotification::create($title, $data['message']))
                 ->withData([
                     'sender_id' => (string) $data['sender_id'],
                     'sender_name' => $data['sender_name'],
@@ -97,7 +99,7 @@ class NotificationController extends Controller
                     'chat_type' => $data['chat_type'],
                 ]);
 
-            Log::info('Sending FCM message...');
+            Log::info('ending FCM message...');
             $this->messaging->send($message);
             Log::info('FCM message sent successfully');
 
@@ -107,9 +109,8 @@ class NotificationController extends Controller
             if (str_contains($e->getMessage(), 'registration token') ||
                 str_contains($e->getMessage(), 'Invalid token') ||
                 str_contains($e->getMessage(), 'NotRegistered')) {
-                DeviceToken::where('fcm_token', $data['fcm_token'])
-                    ->update(['is_active' => false]);
-                Log::warning('Token deactivated: ' . substr($data['fcm_token'], 0, 20) . '...');
+                DeviceToken::where('fcm_token', $data['fcm_token']) ->update(['is_active' => false]);
+                Log::warning('⚠️ Token deactivated');
             }
             throw $e;
         }
