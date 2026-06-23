@@ -22,7 +22,7 @@ class MessageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $query = Message::query()->with(['sender', 'receiver', 'replyTo.sender', 'replyTo.receiver']);
+        $query = Message::query()->with(['sender', 'receiver', 'replyTo.sender', 'replyTo.receiver', 'reactions']);
         $query->betweenUsers($request->user()->id, $request->user_id);
 
         if ($request->has('before')) {

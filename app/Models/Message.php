@@ -74,4 +74,9 @@ class Message extends Model
     {
         return $this->hasMany(Message::class, 'reply_to_id');
     }
+
+    public function reactions()
+    {
+        return $this->hasMany(MessageReaction::class, 'message_id');
+    }
 }
