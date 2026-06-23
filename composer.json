@@ -7,9 +7,6 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "google/apiclient": "^2.19",
-        "guzzlehttp/guzzle": "^7.12",
-        "kreait/firebase-php": "^8.2",
         "laravel/framework": "^13.8",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0"

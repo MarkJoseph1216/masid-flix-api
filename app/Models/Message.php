@@ -17,6 +17,7 @@ class Message extends Model
         'message',
         'is_read',
         'read_at',
+        'reply_to_id',
     ];
 
     protected $casts = [
@@ -62,5 +63,15 @@ class Message extends Model
         static::updating(function ($message) {
             $message->updated_at = now();
         });
+    }
+
+    public function replyTo()
+    {
+        return $this->belongsTo(Message::class, 'reply_to_id')->with(['sender', 'receiver']);
+    }
+
+    public function replies()
+    {
+        return $this->hasMany(Message::class, 'reply_to_id');
     }
 }

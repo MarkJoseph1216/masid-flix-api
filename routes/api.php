@@ -4,14 +4,10 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\WatchRoomController;
-use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\DeviceTokenController;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-
-Route::post('/notification', [NotificationController::class, 'handle'])
-    ->middleware('throttle:100,1');
 
 Route::get('/ping', function () {
     return response()->json(['status' => 'alive', 'time' => now()]);

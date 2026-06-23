@@ -22,7 +22,7 @@ class MessageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $query = Message::query()->with(['sender', 'receiver']);
+        $query = Message::query()->with(['sender', 'receiver', 'replyTo.sender', 'replyTo.receiver']);
         $query->betweenUsers($request->user()->id, $request->user_id);
 
         if ($request->has('before')) {
@@ -47,6 +47,7 @@ class MessageController extends Controller
         $validator = Validator::make($request->all(), [
             'receiver_id' => 'required|exists:users,id',
             'message' => 'required|string|max:1000',
+            'reply_to_id' => 'nullable|exists:users,id',
         ]);
 
         if ($validator->fails()) {
@@ -57,6 +58,7 @@ class MessageController extends Controller
             'sender_id' => $request->user()->id,
             'receiver_id' => $request->receiver_id,
             'message' => $request->message,
+            'reply_to_id' => $request->reply_to_id,
         ]);
 
         $message->load(['sender', 'receiver']);
