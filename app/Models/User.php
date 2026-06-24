@@ -100,4 +100,22 @@ class User extends Authenticatable
             ->pluck('fcm_token')
             ->toArray();
     }
+
+     public function scopeOnline($query)
+    {
+        return $query->where('is_online', true);
+    }
+
+    public function scopeRecentlyActive($query, $minutes = 5)
+    {
+        return $query->where('last_seen_at', '>=', now()->subMinutes($minutes));
+    }
+
+    public function getIsOnlineAttribute($value): bool
+    {
+        if ($this->last_seen_at && $this->last_seen_at->diffInMinutes(now()) > 5) {
+            return false;
+        }
+        return (bool) $value;
+    }
 }

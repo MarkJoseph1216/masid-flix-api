@@ -13,69 +13,11 @@ Route::get('/ping', function () {
     return response()->json(['status' => 'alive', 'time' => now()]);
 });
 
-Route::get('/test-firebase', function () {
-    try {
-        $credentials = env('FIREBASE_SERVICE_ACCOUNT');
-        
-        if (!$credentials) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'FIREBASE_SERVICE_ACCOUNT env variable not set'
-            ], 500);
-        }
-        
-        $data = json_decode($credentials, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Invalid JSON: ' . json_last_error_msg()
-            ], 500);
-        }
-        
-        $factory = (new Kreait\Firebase\Factory)->withServiceAccount($data);
-        $messaging = $factory->createMessaging();
-        
-        return response()->json([
-            'status' => 'success',
-            'project_id' => $data['project_id'] ?? 'unknown',
-            'client_email' => $data['client_email'] ?? 'unknown'
-        ]);
-        
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
-
-Route::get('/debug-firebase', function () {
-    $filePath = storage_path('app/firebase/firebase-credentials.json');
-    
-    $result = [
-        'file_path' => $filePath,
-        'file_exists' => file_exists($filePath),
-        'directory_exists' => is_dir(storage_path('app/firebase')),
-        'storage_path' => storage_path(),
-    ];
-    
-    if (file_exists($filePath)) {
-        $content = file_get_contents($filePath);
-        $data = json_decode($content, true);
-        $result['json_valid'] = json_last_error() === JSON_ERROR_NONE;
-        if ($result['json_valid']) {
-            $result['project_id'] = $data['project_id'] ?? 'missing';
-            $result['client_email'] = $data['client_email'] ?? 'missing';
-        }
-    }
-    
-    return response()->json($result);
-});
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/set-offline', [AuthController::class, 'setOffline']);
 
     Route::get('/online-friends', [AuthController::class, 'onlineFriends']);
     Route::get('/users', [AuthController::class, 'getUsers']);

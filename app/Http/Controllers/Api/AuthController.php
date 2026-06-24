@@ -11,9 +11,6 @@ use App\Http\Controllers\Controller;
 
 class AuthController extends Controller
 {
-    /**
-     * Register a new user
-     */
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -45,10 +42,7 @@ class AuthController extends Controller
             'token_type' => 'Bearer',
         ], 201);
     }
-
-    /**
-     * Login user
-     */
+    
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -162,9 +156,6 @@ class AuthController extends Controller
         ]);
     }
 
-    /**
-     * Update user profile
-     */
     public function updateProfile(Request $request)
     {
         $user = $request->user();
@@ -201,5 +192,23 @@ class AuthController extends Controller
             'message' => 'Profile updated successfully',
             'user' => $user
         ]);
+    }
+
+    public function setOffline(Request $request)
+    {
+        $user = $request->user();
+        if ($user) {
+            $user->setOffline();
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'User set offline successfully'
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found'
+        ], 404);
     }
 }
